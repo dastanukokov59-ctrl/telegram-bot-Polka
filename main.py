@@ -80,7 +80,7 @@ async def send_stream_start_notification(stream_info):
     game_name = stream_info.get("game_name", "")
 
     caption_text = (
-        f"<blockquote><b>КОШКА ОТКРЫЛА КАФЕ! 🐾</b></blockquote>\n\n"
+        f"<b>КОШКА ОТКРЫЛА КАФЕ! 🐾</b>\n\n"
         f"<b>{title}</b>\n"
         f"🎮 <b>Категория:</b> {game_name}"
     )
