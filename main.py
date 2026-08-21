@@ -7,11 +7,11 @@ import aiohttp
 
 # ================= НАСТРОЙКИ (берём из переменных окружения) =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID", "@hatapolskoi")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
-TWITCH_CHANNEL_NAME = os.getenv("TWITCH_CHANNEL_NAME", "po1ka_1839")
+TWITCH_CHANNEL_NAME = os.getenv("TWITCH_CHANNEL_NAME")
 
 IMAGE_FILE_PATH = "cat.jpg" 
 DEFAULT_IMAGE_URL = "https://placehold.co/1280x720/png?text=Stream+Online" 
