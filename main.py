@@ -71,7 +71,7 @@ async def send_stream_start_notification(stream_info):
     game_name = stream_info.get("game_name", "")
 
     caption_text = (
-        f"<blockquote><b>КОШКА ОТКРЫЛА КАФЕ! 🐾</b></blockquote>\n\n"
+        f"<b>КОШКА ОТКРЫЛА КАФЕ! 🐾</b>\n\n"
         f"<b>{title}</b>\n"
         f"🎮 <b>Категория:</b> {game_name}"
     )
@@ -109,12 +109,11 @@ async def send_stream_start_notification(stream_info):
 
 
 async def send_stream_end_notification():
-    text = "Кошка закончила смену 🐾"
+    text = "Кошка закончила смену 🐾\nСпасибо всем за стрим!"
     try:
         await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=text)
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения об окончании стрима: {e}")
-
 
 async def check_stream_loop():
     global is_live
