@@ -120,29 +120,23 @@ async def send_stream_end_notification():
 
 
 async def check_stream_loop():
-    global is_live, offline_counter
+    global is_live
     async with ClientSession() as session:
         while True:
             try:
                 stream_info = await get_stream_info(session)
                 if stream_info:
-                    offline_counter = 0  # Стрим идёт, обнуляем счётчик оффлайна
                     if not is_live:
                         is_live = True
                         await send_stream_start_notification(stream_info)
                 else:
                     if is_live:
-                        offline_counter += 1
-                        # Ждём 2 оффлайн-проверки подряд (2 минуты), чтобы убедиться, что стрим реально выключен
-                        if offline_counter >= 2:
-                            is_live = False
-                            offline_counter = 0
-                            await send_stream_end_notification()
+                        is_live = False
+                        await send_stream_end_notification()
             except Exception as e:
                 logging.error(f"Ошибка в цикле проверки: {e}")
 
             await asyncio.sleep(60)
-
 
 async def handle(request):
     return web.Response(text="Bot is running!")
