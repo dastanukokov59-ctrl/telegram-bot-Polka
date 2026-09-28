@@ -2,7 +2,7 @@ import os
 import asyncio
 import logging
 from aiohttp import web, ClientSession
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.enums import ParseMode
 
@@ -23,7 +23,7 @@ dp = Dispatcher()
 
 twitch_access_token = None
 is_live = False
-offline_counter = 0  # Счётчик проверок оффлайна для защиты от сбоев Twitch
+offline_counter = 0
 
 
 async def get_twitch_access_token(session: ClientSession):
@@ -50,18 +50,22 @@ async def get_stream_info(session: ClientSession):
         "Authorization": f"Bearer {twitch_access_token}"
     }
 
-    async with session.get(url, headers=headers) as resp:
-        if resp.status == 401:
-            await get_twitch_access_token(session)
-            headers["Authorization"] = f"Bearer {twitch_access_token}"
-            async with session.get(url, headers=headers) as resp_retry:
-                data = await resp_retry.json()
-        else:
-            data = await resp.json()
+    try:
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 401:
+                await get_twitch_access_token(session)
+                headers["Authorization"] = f"Bearer {twitch_access_token}"
+                async with session.get(url, headers=headers) as resp_retry:
+                    data = await resp_retry.json()
+            else:
+                data = await resp.json()
 
-        streams = data.get("data", [])
-        if streams:
-            return streams[0]
+            streams = data.get("data", [])
+            if streams:
+                return streams[0]
+            return None
+    except Exception as e:
+        logging.error(f"Ошибка при запросе к Twitch API: {e}")
         return None
 
 
@@ -122,14 +126,14 @@ async def check_stream_loop():
             try:
                 stream_info = await get_stream_info(session)
                 if stream_info:
-                    offline_counter = 0  # Сбрасываем счётчик, если стрим точно идёт
+                    offline_counter = 0  # Стрим идёт, обнуляем счётчик оффлайна
                     if not is_live:
                         is_live = True
                         await send_stream_start_notification(stream_info)
                 else:
                     if is_live:
                         offline_counter += 1
-                        # Подтверждаем конец стрима только если Twitch ответил "оффлайн" 2 раза подряд
+                        # Ждём 2 оффлайн-проверки подряд (2 минуты), чтобы убедиться, что стрим реально выключен
                         if offline_counter >= 2:
                             is_live = False
                             offline_counter = 0
@@ -140,7 +144,6 @@ async def check_stream_loop():
             await asyncio.sleep(60)
 
 
-# Веб-сервер для Render (чтобы сервис не уходил в сон)
 async def handle(request):
     return web.Response(text="Bot is running!")
 
@@ -156,13 +159,8 @@ async def start_dummy_server():
 
 
 async def main():
-    # Запускаем фоновый веб-сервер для Render
     await start_dummy_server()
-
-    # Запускаем проверку стрима в фоновом режиме
     asyncio.create_task(check_stream_loop())
-
-    # Запуск бота
     await dp.start_polling(bot)
 
 
