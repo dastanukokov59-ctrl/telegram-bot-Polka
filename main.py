@@ -23,9 +23,10 @@ dp = Dispatcher()
 
 twitch_access_token = None
 is_live = False
+offline_counter = 0  # Счётчик проверок оффлайна для защиты от сбоев Twitch
 
 
-async def get_twitch_access_token():
+async def get_twitch_access_token(session: ClientSession):
     global twitch_access_token
     url = "https://id.twitch.tv/oauth2/token"
     params = {
@@ -33,16 +34,15 @@ async def get_twitch_access_token():
         "client_secret": TWITCH_CLIENT_SECRET,
         "grant_type": "client_credentials"
     }
-    async with ClientSession() as session:
-        async with session.post(url, params=params) as resp:
-            data = await resp.json()
-            twitch_access_token = data.get("access_token")
+    async with session.post(url, params=params) as resp:
+        data = await resp.json()
+        twitch_access_token = data.get("access_token")
 
 
-async def get_stream_info():
+async def get_stream_info(session: ClientSession):
     global twitch_access_token
     if not twitch_access_token:
-        await get_twitch_access_token()
+        await get_twitch_access_token(session)
 
     url = f"https://api.twitch.tv/helix/streams?user_login={TWITCH_CHANNEL_NAME}"
     headers = {
@@ -50,20 +50,19 @@ async def get_stream_info():
         "Authorization": f"Bearer {twitch_access_token}"
     }
 
-    async with ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
-            if resp.status == 401:
-                await get_twitch_access_token()
-                headers["Authorization"] = f"Bearer {twitch_access_token}"
-                async with session.get(url, headers=headers) as resp_retry:
-                    data = await resp_retry.json()
-            else:
-                data = await resp.json()
+    async with session.get(url, headers=headers) as resp:
+        if resp.status == 401:
+            await get_twitch_access_token(session)
+            headers["Authorization"] = f"Bearer {twitch_access_token}"
+            async with session.get(url, headers=headers) as resp_retry:
+                data = await resp_retry.json()
+        else:
+            data = await resp.json()
 
-            streams = data.get("data", [])
-            if streams:
-                return streams[0]
-            return None
+        streams = data.get("data", [])
+        if streams:
+            return streams[0]
+        return None
 
 
 async def send_stream_start_notification(stream_info):
@@ -115,23 +114,30 @@ async def send_stream_end_notification():
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения об окончании стрима: {e}")
 
-async def check_stream_loop():
-    global is_live
-    while True:
-        try:
-            stream_info = await get_stream_info()
-            if stream_info:
-                if not is_live:
-                    is_live = True
-                    await send_stream_start_notification(stream_info)
-            else:
-                if is_live:
-                    is_live = False
-                    await send_stream_end_notification()
-        except Exception as e:
-            logging.error(f"Ошибка в цикле проверки: {e}")
 
-        await asyncio.sleep(60)
+async def check_stream_loop():
+    global is_live, offline_counter
+    async with ClientSession() as session:
+        while True:
+            try:
+                stream_info = await get_stream_info(session)
+                if stream_info:
+                    offline_counter = 0  # Сбрасываем счётчик, если стрим точно идёт
+                    if not is_live:
+                        is_live = True
+                        await send_stream_start_notification(stream_info)
+                else:
+                    if is_live:
+                        offline_counter += 1
+                        # Подтверждаем конец стрима только если Twitch ответил "оффлайн" 2 раза подряд
+                        if offline_counter >= 2:
+                            is_live = False
+                            offline_counter = 0
+                            await send_stream_end_notification()
+            except Exception as e:
+                logging.error(f"Ошибка в цикле проверки: {e}")
+
+            await asyncio.sleep(60)
 
 
 # Веб-сервер для Render (чтобы сервис не уходил в сон)
