@@ -9,7 +9,7 @@ from aiogram.enums import ParseMode
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
-# Получение переменных окружения
+# Переменные окружения
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID") or "@hatapolskoi"
 TWITCH_CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID")
@@ -23,7 +23,6 @@ dp = Dispatcher()
 
 twitch_access_token = None
 is_live = False
-offline_counter = 0
 
 
 async def get_twitch_access_token(session: ClientSession):
@@ -34,9 +33,12 @@ async def get_twitch_access_token(session: ClientSession):
         "client_secret": TWITCH_CLIENT_SECRET,
         "grant_type": "client_credentials"
     }
-    async with session.post(url, params=params) as resp:
-        data = await resp.json()
-        twitch_access_token = data.get("access_token")
+    try:
+        async with session.post(url, params=params) as resp:
+            data = await resp.json()
+            twitch_access_token = data.get("access_token")
+    except Exception as e:
+        logging.error(f"Ошибка получения токена Twitch: {e}")
 
 
 async def get_stream_info(session: ClientSession):
@@ -65,7 +67,7 @@ async def get_stream_info(session: ClientSession):
                 return streams[0]
             return None
     except Exception as e:
-        logging.error(f"Ошибка при запросе к Twitch API: {e}")
+        logging.error(f"Ошибка запроса к Twitch API: {e}")
         return None
 
 
@@ -107,6 +109,7 @@ async def send_stream_start_notification(stream_info):
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard
             )
+        logging.info("Оповещение о старте успешно отправлено!")
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения о начале стрима: {e}")
 
@@ -115,6 +118,7 @@ async def send_stream_end_notification():
     text = "Кошка закончила смену 🐾\nСпасибо всем за стрим!"
     try:
         await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=text)
+        logging.info("Оповещение о завершении успешно отправлено!")
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения об окончании стрима: {e}")
 
@@ -125,18 +129,23 @@ async def check_stream_loop():
         while True:
             try:
                 stream_info = await get_stream_info(session)
+                
                 if stream_info:
                     if not is_live:
+                        logging.info("Стрим обнаружен! Отправляем анонс...")
                         is_live = True
                         await send_stream_start_notification(stream_info)
                 else:
                     if is_live:
+                        logging.info("Стрим завершился! Отправляем сообщение...")
                         is_live = False
                         await send_stream_end_notification()
             except Exception as e:
                 logging.error(f"Ошибка в цикле проверки: {e}")
 
-            await asyncio.sleep(60)
+            # Проверяем каждые 30 секунд
+            await asyncio.sleep(30)
+
 
 async def handle(request):
     return web.Response(text="Bot is running!")
